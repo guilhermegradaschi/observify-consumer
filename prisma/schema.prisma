@@ -1,0 +1,397 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Alert {
+  id           Int          @id @default(autoincrement())
+  kind         AlertKind
+  expr         String
+  channel      Channel[]
+  enabled      Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime
+  orgId        Int
+  serviceId    Int?
+  method       String?
+  route        String?
+  statusCode   Int?
+  Organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  Service      Service?     @relation(fields: [serviceId], references: [id])
+
+  Incident Incident[] @relation("AlertToIncident")
+
+  @@index([orgId])
+  @@index([orgId, route, method])
+  @@index([orgId, serviceId, route, method])
+  @@index([serviceId])
+}
+
+model ContactMessage {
+  id        String   @id
+  name      String
+  email     String
+  subject   String
+  message   String
+  company   String?
+  userUid   String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model DemoRequest {
+  id            Int      @id @default(autoincrement())
+  nome          String
+  email         String
+  empresa       String
+  cargo         String
+  tamanhoEquipe Int
+  telefone      String?
+  dataHora      DateTime
+  objetivos     String
+  stack         String?
+  createdAt     DateTime @default(now())
+}
+
+model EnterpriseInterest {
+  id        String         @id
+  uid       String?
+  name      String
+  email     String
+  company   String?
+  website   String?
+  useCase   String?
+  volume    String?
+  message   String?
+  status    InterestStatus @default(PENDING)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime
+}
+
+model Incident {
+  id           Int     @id @default(autoincrement())
+  ruleId       Int
+  startedAt    BigInt
+  endedAt      BigInt?
+  acknowledged Boolean @default(false)
+
+  alert Alert @relation("AlertToIncident", fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+}
+
+model Metric {
+  id           Int          @id @default(autoincrement())
+  method       String
+  path         String
+  status       Int
+  duration     BigInt
+  timestamp    BigInt
+  orgId        Int
+  serviceId    Int?
+  durMs        Float
+  release      String?
+  reqBytes     Int?
+  requestId    String?
+  resBytes     Int?
+  route        String
+  traceId      String?
+  Organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  Service      Service?     @relation(fields: [serviceId], references: [id])
+
+  @@index([orgId, route, method])
+  @@index([orgId, serviceId, route, method, timestamp])
+}
+
+model OrgApiKey {
+  id           Int          @id @default(autoincrement())
+  orgId        Int
+  name         String
+  hash         String       @unique
+  prefix       String
+  last4        String
+  active       Boolean      @default(true)
+  expiresAt    DateTime?
+  createdAt    DateTime     @default(now())
+  revokedAt    DateTime?
+  Organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, active])
+}
+
+model OrgInvite {
+  id              Int          @id @default(autoincrement())
+  orgId           Int
+  email           String
+  role            OrgRole      @default(MEMBER)
+  tokenHash       String       @unique
+  invitedByUserId Int
+  createdAt       DateTime     @default(now())
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  User            User         @relation(fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  Organization    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([expiresAt])
+  @@index([orgId])
+}
+
+model OrgMember {
+  userId       Int
+  orgId        Int
+  role         OrgRole      @default(MEMBER)
+  joinedAt     DateTime     @default(now())
+  Organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  User         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, orgId])
+  @@index([orgId])
+}
+
+model Organization {
+  id               Int              @id @default(autoincrement())
+  name             String
+  slug             String           @unique
+  plan             PlanTier         @default(FREE)
+  stripeCustomerId String?          @unique
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime
+  contactEmail     String?
+  enforceDomain    String?
+  timeZone         String?
+  Alert            Alert[]
+  Metric           Metric[]
+  OrgApiKey        OrgApiKey[]
+  OrgInvite        OrgInvite[]
+  OrgMember        OrgMember[]
+  Service          Service[]
+  Slo              Slo[]
+  Subscription     Subscription[]
+  MetricRollup1h   MetricRollup1h[]
+  MetricRollup1d   MetricRollup1d[]
+  MetricRollup1m   MetricRollup1m[]
+}
+
+model Service {
+  id             Int              @id @default(autoincrement())
+  orgId          Int
+  name           String
+  slug           String
+  env            Environment      @default(PROD)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now())
+  Alert          Alert[]
+  Metric         Metric[]
+  Organization   Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  Slo            Slo[]
+  MetricRollup1h MetricRollup1h[]
+  MetricRollup1d MetricRollup1d[]
+  MetricRollup1m MetricRollup1m[]
+
+  @@unique([orgId, slug])
+  @@index([orgId, env])
+}
+
+model Slo {
+  id           Int          @id @default(autoincrement())
+  target       String
+  window       String
+  budgetUsed   Float        @default(0)
+  burnRate     Float        @default(0)
+  status       String       @default("ok")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime
+  orgId        Int
+  serviceId    Int?
+  method       String?
+  route        String?
+  Organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  Service      Service?     @relation(fields: [serviceId], references: [id])
+
+  @@index([orgId])
+  @@index([orgId, serviceId, route, method])
+  @@index([serviceId])
+}
+
+model Subscription {
+  id                   Int          @id @default(autoincrement())
+  plan                 PlanTier
+  status               SubStatus
+  stripeSubscriptionId String       @unique
+  stripePriceId        String
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @default(now())
+  orgId                Int
+  Organization         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([status])
+}
+
+model User {
+  id        Int         @id @default(autoincrement())
+  uid       String      @unique
+  email     String      @unique
+  createdAt DateTime    @default(now())
+  updatedAt DateTime
+  role      Role        @default(USER)
+  imgBase64 String?
+  OrgInvite OrgInvite[]
+  OrgMember OrgMember[]
+}
+
+model MetricRollup1m {
+  tsBucketMs BigInt
+  orgId      Int
+  serviceId  Int
+  route      String
+  method     String
+
+  reqCount  BigInt
+  errCount  BigInt
+  sumDurUs  BigInt
+  sumDurUs2 BigInt
+
+  satCount Int
+  tolCount Int
+  totCount Int
+
+  histCounts Int[]
+
+  p95Us BigInt?
+  p99Us BigInt?
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  service Service?     @relation(fields: [serviceId], references: [id])
+
+  @@id([tsBucketMs, orgId, serviceId, route, method])
+  @@index([orgId, serviceId, route, method, tsBucketMs])
+}
+
+model MetricRollup1h {
+  tsBucketMs BigInt
+  orgId      Int
+  serviceId  Int
+  route      String
+  method     String
+
+  reqCount  BigInt
+  errCount  BigInt
+  sumDurUs  BigInt
+  sumDurUs2 BigInt
+
+  satCount Int
+  tolCount Int
+  totCount Int
+
+  histCounts Int[]
+
+  p95Us BigInt?
+  p99Us BigInt?
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  service Service?     @relation(fields: [serviceId], references: [id])
+
+  @@id([tsBucketMs, orgId, serviceId, route, method])
+  @@index([orgId, serviceId, route, method, tsBucketMs])
+}
+
+model MetricRollup1d {
+  tsBucketMs BigInt
+  orgId      Int
+  serviceId  Int
+  route      String
+  method     String
+
+  reqCount  BigInt
+  errCount  BigInt
+  sumDurUs  BigInt
+  sumDurUs2 BigInt
+
+  satCount Int
+  tolCount Int
+  totCount Int
+
+  histCounts Int[]
+
+  p95Us BigInt?
+  p99Us BigInt?
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  service Service?     @relation(fields: [serviceId], references: [id])
+
+  @@id([tsBucketMs, orgId, serviceId, route, method])
+  @@index([orgId, serviceId, route, method, tsBucketMs])
+}
+
+model RollupState {
+  id           Int    @id @default(autoincrement())
+  kind         String @unique // "1h" ou "1d"
+  lastBucketMs BigInt @default(0)
+}
+
+enum AlertKind {
+  latency
+  error
+  rpm
+}
+
+enum Channel {
+  email
+  slack
+  webhook
+}
+
+enum Environment {
+  PROD
+  HMG
+  DEV
+}
+
+enum InterestStatus {
+  PENDING
+  CONTACTED
+  WON
+  LOST
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum PlanTier {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum Role {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum SubStatus {
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  PAUSED
+}
